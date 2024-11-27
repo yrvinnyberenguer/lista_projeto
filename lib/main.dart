@@ -10,15 +10,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Lista de Tarefas',
       theme: ThemeData(
-        primaryColor: Color.fromARGB(255, 93, 113, 224), // Cor primária
-        scaffoldBackgroundColor: Color.fromARGB(255, 167, 193, 245), // Cor de fundo
+        primaryColor: Color.fromARGB(255, 93, 113, 224),
+        scaffoldBackgroundColor: Color.fromARGB(255, 167, 193, 245),
         textTheme: TextTheme(
           bodyMedium: TextStyle(fontFamily: 'Arial'),
           titleLarge: TextStyle(
-            fontFamily: 'Times New Roman', 
-            fontWeight: FontWeight.bold, 
+            fontFamily: 'Times New Roman',
+            fontWeight: FontWeight.bold,
             fontSize: 24,
-          ), // Título com "Times New Roman"
+          ),
         ),
       ),
       home: TodoApp(),
@@ -32,36 +32,38 @@ class TodoApp extends StatefulWidget {
 }
 
 class _TodoAppState extends State<TodoApp> {
-  // Lista de tarefas com seu estado (concluída ou não)
-  final List<Map<String, dynamic>> _tasks = [];
-  final TextEditingController _taskController = TextEditingController();
+  final Map<String, List<Map<String, dynamic>>> _tasksByCategory = {
+    "A Fazer": [],
+    "Em Andamento": [],
+    "Concluído": [],
+  };
 
-  // Adiciona uma nova tarefa
-  void _addTask(String task) {
-    if (task.isNotEmpty) {
+  final TextEditingController _taskController = TextEditingController();
+  String _selectedCategory = "A Fazer";
+
+  void _addTask() {
+    if (_taskController.text.isNotEmpty) {
       setState(() {
-        _tasks.add({'title': task, 'done': false});
+        _tasksByCategory[_selectedCategory]!.add({'title': _taskController.text});
       });
-      _taskController.clear(); // Limpa o campo de texto
-      Navigator.of(context).pop(); // Fecha o modal
+      _taskController.clear();
+      Navigator.of(context).pop();
     }
   }
 
-  // Remove uma tarefa
-  void _deleteTask(int index) {
+  void _deleteTask(String category, int index) {
     setState(() {
-      _tasks.removeAt(index);
+      _tasksByCategory[category]!.removeAt(index);
     });
   }
 
-  // Marca ou desmarca uma tarefa como concluída
-  void _toggleTaskStatus(int index) {
+  void _moveTask(String task, String fromCategory, String toCategory) {
     setState(() {
-      _tasks[index]['done'] = !_tasks[index]['done'];
+      _tasksByCategory[fromCategory]!.removeWhere((item) => item['title'] == task);
+      _tasksByCategory[toCategory]!.add({'title': task});
     });
   }
 
-  // Modal para adicionar tarefa
   void _showAddTaskModal() {
     showModalBottomSheet(
       context: context,
@@ -76,7 +78,7 @@ class _TodoAppState extends State<TodoApp> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Nova Tarefa',
+                'Adicionar Nova Tarefa',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
@@ -89,10 +91,32 @@ class _TodoAppState extends State<TodoApp> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
+                onSubmitted: (_) => _addTask(), // Adiciona a tarefa ao pressionar Enter
+              ),
+              SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                items: _tasksByCategory.keys.map((String category) {
+                  return DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedCategory = value!;
+                  });
+                },
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  labelText: 'Selecione a categoria',
+                ),
               ),
               SizedBox(height: 10),
               ElevatedButton(
-                onPressed: () => _addTask(_taskController.text),
+                onPressed: _addTask,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color.fromARGB(255, 93, 113, 224),
                   shape: RoundedRectangleBorder(
@@ -108,6 +132,99 @@ class _TodoAppState extends State<TodoApp> {
     );
   }
 
+  Widget _buildTaskBox(String category) {
+    return Expanded(
+      child: DragTarget<Map<String, String>>(
+        onWillAccept: (data) => data != null && data['from'] != category,
+        onAccept: (data) {
+          _moveTask(data['task']!, data['from']!, category);
+        },
+        builder: (context, candidateData, rejectedData) {
+          return Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade300,
+                  blurRadius: 5,
+                  offset: Offset(2, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Text(
+                  category,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+                Divider(),
+                if (_tasksByCategory[category]!.isEmpty)
+                  Text(
+                    'Sem tarefas',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  )
+                else
+                  ..._tasksByCategory[category]!.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final task = entry.value;
+                    return Draggable<Map<String, String>>(
+                      data: {'task': task['title'], 'from': category},
+                      child: ListTile(
+                        title: Text(
+                          task['title'],
+                          style: TextStyle(
+                            decoration: category == "Concluído"
+                                ? TextDecoration.lineThrough
+                                : null,
+                            color: category == "Concluído"
+                                ? Colors.grey
+                                : Colors.black,
+                          ),
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, color: Colors.redAccent),
+                          onPressed: () => _deleteTask(category, index),
+                        ),
+                      ),
+                      feedback: Material(
+                        child: Container(
+                          padding: EdgeInsets.all(8),
+                          color: Colors.blueAccent,
+                          child: Text(
+                            task['title'],
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      childWhenDragging: Opacity(
+                        opacity: 0.5,
+                        child: ListTile(
+                          title: Text(
+                            task['title'],
+                            style: TextStyle(
+                              decoration: category == "Concluído"
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -115,57 +232,24 @@ class _TodoAppState extends State<TodoApp> {
         title: Text(
           'Lista de Tarefas',
           style: TextStyle(
-            fontFamily: 'Times New Roman', 
-            fontWeight: FontWeight.bold, 
+            fontFamily: 'Times New Roman',
+            fontWeight: FontWeight.bold,
             fontSize: 24,
           ),
         ),
         centerTitle: true,
       ),
-      body: _tasks.isEmpty
-          ? Center(
-              child: Text(
-                'Nenhuma tarefa adicionada!',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(8.0),
-              itemCount: _tasks.length,
-              itemBuilder: (context, index) {
-                return Card(
-                  elevation: 2,
-                  margin: EdgeInsets.symmetric(vertical: 5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: ListTile(
-                    leading: Checkbox(
-                      value: _tasks[index]['done'],
-                      onChanged: (bool? value) {
-                        _toggleTaskStatus(index);
-                      },
-                    ),
-                    title: Text(
-                      _tasks[index]['title'],
-                      style: TextStyle(
-                        fontSize: 16,
-                        decoration: _tasks[index]['done']
-                            ? TextDecoration.lineThrough
-                            : null,
-                        color: _tasks[index]['done']
-                            ? Colors.grey
-                            : Colors.black,
-                      ),
-                    ),
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete, color: Colors.redAccent),
-                      onPressed: () => _deleteTask(index),
-                    ),
-                  ),
-                );
-              },
-            ),
+      body: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildTaskBox("A Fazer"),
+            _buildTaskBox("Em Andamento"),
+            _buildTaskBox("Concluído"),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddTaskModal,
         backgroundColor: Colors.indigo,
